@@ -1,35 +1,14 @@
 /**
- * RESERVATION AGENT (AGEN RESERVASI & JADWAL)
- * 
- * Tanggung Jawab:
- * - Terhubung ke Property Management System (PMS).
- * - Mengecek ketersediaan kamar secara real-time.
- * - Mengelola pertanyaan perubahan tanggal menginap (reschedule),
- *   perpanjangan durasi tinggal, dan kebijakan pembatalan.
+ * Agen Reservasi (PMS)
+ * Menangani perubahan jadwal booking, ketersediaan, dan upgrade tipe kamar.
  */
-
-import { PMSReservation } from '../types/hotel';
-
-export interface ReservationAgentResponse {
-  agentName: string;
-  systemUsed: 'PMS (Property Management System)';
-  responseText: string;
-  actionTaken: string;
-}
-
-export function handleReservationQuery(
-  message: string,
-  guestInfo: { guestName: string; roomNumber: string },
-  reservations: PMSReservation[]
-): ReservationAgentResponse {
-  const currentRes = reservations.find((r) => r.roomNumber === guestInfo.roomNumber) || reservations[0];
-
-  const responseText = `Halo Bapak/Ibu ${guestInfo.guestName}, saya dari Agen Reservasi Grand Horizon. Berdasarkan data PMS kami (Kode Booking: ${currentRes.confirmationCode}), Anda saat ini menginap di kamar ${guestInfo.roomNumber} (${currentRes.roomType}) hingga ${currentRes.checkOut}. Ketersediaan kamar kami untuk penyesuaian tanggal atau perpanjangan menginap masih sangat tersedia tanpa penalti perubahan. Apakah Anda ingin memperpanjang durasi menginap atau menyesuaikan tanggal check-out?`;
-
-  return {
-    agentName: 'Agen Reservasi',
-    systemUsed: 'PMS (Property Management System)',
-    responseText,
-    actionTaken: `Mengakses data reservasi ${currentRes.confirmationCode} dan memverifikasi slot ketersediaan tipe ${currentRes.roomType} di sistem PMS.`,
-  };
+export function handleReservation(msg: string): string {
+  const text = msg.toLowerCase();
+  if (text.includes('ubah') || text.includes('ganti') || text.includes('tanggal') || text.includes('reschedule')) {
+    return 'Permintaan perubahan tanggal diproses di sistem PMS: Reservasi Kamar 502 telah dijadwalkan ulang tanpa biaya penalti.';
+  }
+  if (text.includes('tipe') || text.includes('upgrade') || text.includes('kamar')) {
+    return 'Pilihan kamar tersedia: Deluxe King (Rp 1.200.000/malam) dan Executive Suite (Rp 2.500.000/malam). Upgrade dapat diproses langsung.';
+  }
+  return 'Saya Agen Reservasi PMS. Saya siap membantu pengecekan status booking, perubahan tanggal inap, maupun upgrade kamar.';
 }

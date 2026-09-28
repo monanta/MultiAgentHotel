@@ -1,60 +1,17 @@
 /**
- * HOUSEKEEPING & MAINTENANCE AGENT (AGEN KAMAR & FASILITAS)
- * 
- * Tanggung Jawab:
- * - Terhubung ke Facility Management System & Aplikasi Staf Runner.
- * - Menerbitkan tiket tugas operasional otomatis ke staf lantai (misal: pengantaran handuk, air mineral).
- * - Menetapkan SLA waktu penyelesaian (15-20 menit) dan mengonfirmasi waktu tiba kepada tamu.
+ * Agen Housekeeping
+ * Menangani permintaan fasilitas kamar, perlengkapan mandi, dan kebersihan kamar.
  */
-
-import { HousekeepingTicket } from '../types/hotel';
-
-export interface HousekeepingAgentResponse {
-  agentName: string;
-  systemUsed: 'Facility Management System & Staf Runner';
-  responseText: string;
-  actionTaken: string;
-  createdTicket?: HousekeepingTicket;
-}
-
-export function handleHousekeepingQuery(
-  message: string,
-  guestInfo: { guestName: string; roomNumber: string }
-): HousekeepingAgentResponse {
-  const lower = message.toLowerCase();
-  const isAmenity = lower.includes('handuk') || lower.includes('air') || lower.includes('bantal') || lower.includes('sandal');
-
-  const itemName = lower.includes('handuk')
-    ? 'Handuk Mandi Ekstra'
-    : lower.includes('air')
-    ? 'Air Mineral Tambahan'
-    : lower.includes('bantal')
-    ? 'Bantal Ekstra'
-    : 'Layanan Kamar';
-
-  const ticketId = `HK-${Date.now().toString().slice(-3)}`;
-  const staffRunner = 'Bambang Irawan (Housekeeping Floor Runner)';
-
-  const newTicket: HousekeepingTicket = {
-    id: ticketId,
-    roomNumber: guestInfo.roomNumber,
-    guestName: guestInfo.guestName,
-    category: isAmenity ? 'Amenities Refill' : 'Housekeeping Clean',
-    priority: 'Normal' as any,
-    description: itemName,
-    status: 'Dispatched',
-    assignedStaff: staffRunner,
-    createdAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-    targetMinutes: 15,
-  };
-
-  const responseText = `Baik Bapak/Ibu ${guestInfo.guestName}, permintaan ${itemName} untuk kamar ${guestInfo.roomNumber} telah berhasil kami jadwalkan (Tiket: ${ticketId}). Petugas kami (${staffRunner}) sedang menyiapkan dan akan mengantarkannya langsung ke pintu kamar Anda dalam waktu sekitar 10-15 menit.`;
-
-  return {
-    agentName: 'Agen Housekeeping & Fasilitas',
-    systemUsed: 'Facility Management System & Staf Runner',
-    responseText,
-    actionTaken: `Menerbitkan tiket kerja ${ticketId} ke ${staffRunner} dengan target penyelesaian 15 menit.`,
-    createdTicket: newTicket,
-  };
+export function handleHousekeeping(msg: string): string {
+  const text = msg.toLowerCase();
+  if (text.includes('handuk') || text.includes('towel')) {
+    return 'Tiket HK-102 dibuat: 2 set handuk mandi bersih sedang diantar oleh staf runner ke kamar Anda (estimasi 10 menit).';
+  }
+  if (text.includes('air') || text.includes('mineral') || text.includes('minum')) {
+    return 'Tiket HK-103 dibuat: Tambahan 4 botol air mineral premium sedang dikirim ke kamar Anda.';
+  }
+  if (text.includes('bersih') || text.includes('make up') || text.includes('sapu')) {
+    return 'Permintaan make-up room dicatat: Tim housekeeping lantai telah dijadwalkan untuk membersihkan kamar Anda segera.';
+  }
+  return 'Saya Agen Housekeeping. Beritahu saya jika Anda memerlukan handuk baru, air mineral tambahan, bantal, atau pembersihan kamar.';
 }

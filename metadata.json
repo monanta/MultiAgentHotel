@@ -2,5 +2,7 @@
   "name": "Grand Horizon - Multi-Agent Hotel Customer Service",
   "description": "Sistem cerdas customer service hotel multi-agent berbasis arsitektur terdistribusi (Reservasi, Concierge, Housekeeping, Billing, & Eskalasi Human) dengan Logistic Regression decision threshold dan integrasi PMS/POS/Fasilitas.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

@@ -1,216 +1,73 @@
 /**
- * ORCHESTRATOR AGENT (PENGATUR ALUR UTAMA)
- * 
- * Peran:
- * 1. Menerima pesan masuk dari tamu hotel (Omnichannel: WhatsApp / Tablet / Web).
- * 2. Mengekstraksi fitur (NLP): intent, intentComplexity (x1), dan riskLevel (x2).
- * 3. Menghitung model Machine Learning: Regresi Logistik + Sigmoid Gatekeeper.
- *    Formula: z = w1*x1 + w2*x2 + b
- *             P(Human | x) = 1 / (1 + e^-z)
- * 4. Mengambil keputusan kebijakan:
- *    - Jika P(Human | x) > threshold (0.80): Eskalasi ke Staf Manusia (Front Office).
- *    - Jika P(Human | x) <= threshold: Meneruskan ke Agen Spesialis (Reservasi, Concierge, Housekeeping, Billing).
+ * Agen Orchestrator (Router Pusat)
+ * Menganalisis pesan tamu, mengarahkan ke agen spesialis,
+ * atau mengeskalasikan ke staf manusia jika terdapat komplain/masalah berat.
  */
+import { AgentResult } from '../types/hotel';
+import { handleConcierge } from './conciergeAgent';
+import { handleReservation } from './reservationAgent';
+import { handleHousekeeping } from './housekeepingAgent';
+import { handleBilling } from './billingAgent';
 
-import { ExtractionFeatures, LogisticRegressionParams, LogisticRegressionResult, AgentType } from '../types/hotel';
+export function routeMessage(message: string): AgentResult {
+  const text = message.toLowerCase();
 
-export const DEFAULT_LR_PARAMS: LogisticRegressionParams = {
-  w1: 0.8,   // Bobot Intent Complexity
-  w2: 2.0,   // Bobot Risk Level
-  b: -2.0,   // Bias / Intercept
-  tau: 0.80, // Ambang batas eskalasi ke staf manusia
-};
+  // 1. Deteksi Eskalasi Staf Manusia (Komplain tinggi / sengketa biaya)
+  const isHighRisk =
+    text.includes('kotor') ||
+    text.includes('kecewa') ||
+    text.includes('marah') ||
+    text.includes('sengketa') ||
+    text.includes('belum dibersihkan') ||
+    text.includes('salah charge') ||
+    text.includes('tidak kenal') ||
+    text.includes('komplain');
 
-/**
- * Ekstraksi Fitur dari Pesan Tamu (NLP / NLU Rule-based Extraction)
- */
-export function extractFeatures(
-  message: string,
-  guestContext?: { roomNumber?: string; guestName?: string }
-): ExtractionFeatures {
-  const lower = message.toLowerCase().trim();
-
-  // Ekstraksi nomor kamar jika ada (contoh: "kamar 802", "room 415")
-  const roomMatch = lower.match(/(?:kamar|room|no\.?)\s*([0-9]{3,4})/i);
-  const detectedRoom = roomMatch ? roomMatch[1] : guestContext?.roomNumber || '802';
-
-  // 1. Sengketa Tagihan / Billing Dispute (Risiko Tinggi, Kerumitan Tinggi)
-  if (
-    lower.includes('charge') ||
-    lower.includes('tagihan tidak') ||
-    lower.includes('tidak kenal') ||
-    lower.includes('sengketa') ||
-    lower.includes('salah hitung') ||
-    lower.includes('overcharge') ||
-    (lower.includes('tagihan') && lower.includes('mahal'))
-  ) {
+  if (isHighRisk) {
     return {
-      intent: 'billing_dispute',
-      intentName: 'Sengketa Tagihan / Dispute',
-      targetAgent: 'billing',
-      intentComplexity: 4, // x1 = 4
-      riskLevel: 1,        // x2 = 1 (Risiko finansial tinggi)
-      entities: {
-        roomNumber: detectedRoom,
-        guestName: guestContext?.guestName || 'Budi Santoso',
-      },
-      explanation: 'Pesan mengandung klaim sengketa keuangan atau tuduhan biaya yang tidak dikenal.',
+      agentRole: 'human',
+      agentName: 'Front Office (Eskalasi Staf)',
+      reply: 'Pesan Anda terdeteksi membutuhkan penanganan staf manusia dan telah diteruskan ke Meja Front Office. Staf kami akan membalas secara langsung sesaat lagi.',
+      isEscalated: true,
+      reason: 'Komplain pelayanan / sengketa terdeteksi',
     };
   }
 
-  // 2. Komplain Housekeeping Berat (Kamar kotor/belum dibersihkan)
-  if (
-    lower.includes('belum dibersihkan') ||
-    lower.includes('kotor') ||
-    lower.includes('sejak pagi') ||
-    lower.includes('kecewa') ||
-    lower.includes('bau')
-  ) {
+  // 2. Routing ke Agen Reservasi
+  if (text.includes('booking') || text.includes('reservasi') || text.includes('ubah') || text.includes('tanggal') || text.includes('upgrade')) {
     return {
-      intent: 'housekeeping_complaint',
-      intentName: 'Komplain Kebersihan Kamar',
-      targetAgent: 'housekeeping',
-      intentComplexity: 3, // x1 = 3
-      riskLevel: 1,        // x2 = 1 (Risiko kepuasan tamu kritis)
-      entities: {
-        roomNumber: detectedRoom,
-        guestName: guestContext?.guestName || 'Budi Santoso',
-        item: 'Pembersihan Kamar',
-      },
-      explanation: 'Keluhan kamar belum dibersihkan sejak pagi berisiko tinggi terhadap reputasi hotel.',
+      agentRole: 'reservation',
+      agentName: 'Agen Reservasi (PMS)',
+      reply: handleReservation(message),
+      isEscalated: false,
     };
   }
 
-  // 3. Laporan Kerusakan Teknis (Maintenance)
-  if (
-    lower.includes('ac ') ||
-    lower.includes('bocor') ||
-    lower.includes('rusak') ||
-    lower.includes('mati lampu') ||
-    lower.includes('air panas')
-  ) {
+  // 3. Routing ke Agen Housekeeping
+  if (text.includes('handuk') || text.includes('bersih') || text.includes('air') || text.includes('mineral') || text.includes('sampah')) {
     return {
-      intent: 'maintenance_issue',
-      intentName: 'Laporan Kerusakan Kamar',
-      targetAgent: 'housekeeping',
-      intentComplexity: 3,
-      riskLevel: 1,
-      entities: {
-        roomNumber: detectedRoom,
-        guestName: guestContext?.guestName || 'Budi Santoso',
-      },
-      explanation: 'Kerusakan fasilitas fisik kamar membutuhkan perhatian cepat staf teknisi.',
+      agentRole: 'housekeeping',
+      agentName: 'Agen Housekeeping',
+      reply: handleHousekeeping(message),
+      isEscalated: false,
     };
   }
 
-  // 4. Perubahan Jadwal Booking (Agen Reservasi - PMS)
-  if (
-    lower.includes('ubah tanggal') ||
-    lower.includes('perpanjang') ||
-    lower.includes('reschedule') ||
-    lower.includes('batal') ||
-    lower.includes('ganti kamar')
-  ) {
+  // 4. Routing ke Agen Billing & POS
+  if (text.includes('tagihan') || text.includes('bill') || text.includes('biaya') || text.includes('bayar') || text.includes('folio')) {
     return {
-      intent: 'reservation_change',
-      intentName: 'Perubahan Tanggal / Kamar',
-      targetAgent: 'reservation',
-      intentComplexity: 2, // x1 = 2
-      riskLevel: 0,        // x2 = 0 (Aman ditangani bot via PMS)
-      entities: {
-        roomNumber: detectedRoom,
-        guestName: guestContext?.guestName || 'Budi Santoso',
-      },
-      explanation: 'Permintaan perubahan reservasi rutin yang dapat diproses otomatis lewat sistem PMS.',
+      agentRole: 'billing',
+      agentName: 'Agen Billing & POS',
+      reply: handleBilling(message),
+      isEscalated: false,
     };
   }
 
-  // 5. Informasi Rincian Tagihan Rutin (Agen Billing - POS)
-  if (
-    lower.includes('rincian') ||
-    lower.includes('total tagihan') ||
-    lower.includes('cek bill') ||
-    lower.includes('folio')
-  ) {
-    return {
-      intent: 'billing_inquiry',
-      intentName: 'Pengecekan Tagihan Kamar',
-      targetAgent: 'billing',
-      intentComplexity: 2,
-      riskLevel: 0,
-      entities: {
-        roomNumber: detectedRoom,
-        guestName: guestContext?.guestName || 'Budi Santoso',
-      },
-      explanation: 'Pertanyaan status tagihan normal yang ditarik langsung dari POS/PMS.',
-    };
-  }
-
-  // 6. Permintaan Amenitas Standar (Agen Housekeeping)
-  if (
-    lower.includes('handuk') ||
-    lower.includes('air mineral') ||
-    lower.includes('bantal') ||
-    lower.includes('sandal') ||
-    lower.includes('sabun')
-  ) {
-    return {
-      intent: 'amenity_request',
-      intentName: 'Permintaan Amenitas Kamar',
-      targetAgent: 'housekeeping',
-      intentComplexity: 1,
-      riskLevel: 0,
-      entities: {
-        roomNumber: detectedRoom,
-        guestName: guestContext?.guestName || 'Budi Santoso',
-        item: lower.includes('handuk') ? 'Handuk Tambahan' : 'Air Mineral Tambahan',
-      },
-      explanation: 'Permintaan barang fasilitas kamar standar, langsung dibuatkan tiket runner.',
-    };
-  }
-
-  // 7. Informasi Fasilitas / Kebijakan Hotel (Agen Concierge)
+  // 5. Default ke Agen Concierge
   return {
-    intent: 'concierge_info',
-    intentName: 'Informasi Hotel & Wisata',
-    targetAgent: 'concierge',
-    intentComplexity: 1, // x1 = 1
-    riskLevel: 0,        // x2 = 0
-    entities: {
-      roomNumber: detectedRoom,
-      guestName: guestContext?.guestName || 'Budi Santoso',
-    },
-    explanation: 'Pertanyaan seputar jam check-in/out, sarapan, kolam renang, atau rekomendasi.',
-  };
-}
-
-/**
- * Kalkulasi Model Machine Learning: Regresi Logistik + Sigmoid
- * z = w1*x1 + w2*x2 + b
- * P(Human | x) = 1 / (1 + e^-z)
- */
-export function evaluateEscalationML(
-  x1: number,
-  x2: number,
-  params: LogisticRegressionParams = DEFAULT_LR_PARAMS
-): LogisticRegressionResult {
-  const { w1, w2, b, tau } = params;
-  const z = w1 * x1 + w2 * x2 + b;
-  const probability = 1 / (1 + Math.exp(-z));
-  const needsHuman = probability > tau;
-
-  const stepCalculation = `z = (${w1})(${x1}) + (${w2})(${x2}) + (${b}) = ${z.toFixed(2)} | P = ${(probability * 100).toFixed(1)}%`;
-
-  return {
-    x1,
-    x2,
-    w1,
-    w2,
-    b,
-    z,
-    probability,
-    threshold: tau,
-    needsHuman,
-    stepCalculation,
+    agentRole: 'concierge',
+    agentName: 'Agen Concierge',
+    reply: handleConcierge(message),
+    isEscalated: false,
   };
 }

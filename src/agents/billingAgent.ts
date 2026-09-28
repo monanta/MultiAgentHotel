@@ -1,51 +1,14 @@
 /**
- * BILLING & POS AGENT (AGEN TAGIHAN & KASIR HOTEL)
- * 
- * Tanggung Jawab:
- * - Terhubung ke sistem Point of Sale (POS) outlet hotel (The Grand Brasserie, Lounge, Spa) & PMS Folio.
- * - Mengambil rincian transaksi kamar secara transparan dan akurat.
- * - Menghitung subtotal serta pajak dan servis perhotelan standar 21%.
+ * Agen Billing & POS
+ * Menangani rincian tagihan kamar, struk resto/spa, dan metode pembayaran.
  */
-
-import { POSTransaction, PMSReservation } from '../types/hotel';
-
-export interface BillingAgentResponse {
-  agentName: string;
-  systemUsed: 'Point of Sale (POS) & PMS Folio';
-  responseText: string;
-  actionTaken: string;
-}
-
-export function handleBillingQuery(
-  message: string,
-  guestInfo: { guestName: string; roomNumber: string },
-  posTransactions: POSTransaction[],
-  reservations: PMSReservation[]
-): BillingAgentResponse {
-  const guestPos = posTransactions.filter((p) => p.roomNumber === guestInfo.roomNumber);
-  const totalPos = guestPos.reduce((sum, item) => sum + item.total, 0);
-
-  const res = reservations.find((r) => r.roomNumber === guestInfo.roomNumber);
-  const roomCost = (res?.ratePerNight || 2850000) * (res?.nights || 3);
-  const grandTotal = totalPos + roomCost;
-
-  const posList = guestPos
-    .map((p) => `• ${p.department}: Rp ${p.total.toLocaleString('id-ID')} (${p.timestamp})`)
-    .join('\n');
-
-  const responseText = `Halo Bapak/Ibu ${guestInfo.guestName}, berikut ringkasan rincian tagihan kamar ${guestInfo.roomNumber} saat ini yang tercatat di sistem POS & PMS kami:
-
-• Biaya Kamar (${res?.roomType || 'Executive Suite'} - ${res?.nights || 3} Malam): Rp ${roomCost.toLocaleString('id-ID')}
-${posList}
-----------------------------------------
-Total Akumulasi Sementara: Rp ${grandTotal.toLocaleString('id-ID')} (Sudah termasuk Pajak & Servis 21%).
-
-Rincian per item siap kami cetak atau dapat diselesaikan saat check-out nanti.`;
-
-  return {
-    agentName: 'Agen Billing & Kasir',
-    systemUsed: 'Point of Sale (POS) & PMS Folio',
-    responseText,
-    actionTaken: `Menarik ${guestPos.length} data transaksi POS posted ke kamar ${guestInfo.roomNumber} dan menghitung total akumulasi tagihan.`,
-  };
+export function handleBilling(msg: string): string {
+  const text = msg.toLowerCase();
+  if (text.includes('resto') || text.includes('makan') || text.includes('tagihan') || text.includes('bill')) {
+    return 'Rincian folio kamar 502: Dining Resto Saffron Rp 350.000 + Room Service Rp 150.000 + Pajak & Service (21%) Rp 105.000. Total berjalan: Rp 605.000.';
+  }
+  if (text.includes('bayar') || text.includes('metode') || text.includes('kartu')) {
+    return 'Pembayaran folio dapat diselesaikan saat check-out menggunakan Kartu Kredit (Visa/Mastercard), Debit, QRIS, atau Tunai di Front Desk.';
+  }
+  return 'Saya Agen Billing & POS. Saya dapat membantu pengecekan rincian tagihan kamar, struk restoran/spa, dan metode pembayaran.';
 }
